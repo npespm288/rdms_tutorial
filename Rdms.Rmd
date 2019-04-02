@@ -1,0 +1,72 @@
+---
+title: "R Notebook"
+author: "Nick Pesta"
+output: github_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+library(tidyverse)
+install.packages("MonetDBLite")
+library(MonetDBLite)
+#install.packages("dbplyr")
+library(DBI)
+library(dbplyr)
+install.packages("arkdb")
+library(arkdb) #
+```
+
+```{r}
+download.file("http://www.catalogueoflife.org/DCA_Export/zip-fixed/2013-annual.zip", "2013-col.zip")
+unzip("2013-col.zip", exdir = "2013-col")
+```
+
+```{r}
+read_tsv("2013-col/taxa.txt", n_max = 10)
+```
+
+
+```{r}
+dir.create("database")
+con <- DBI::dbConnect(MonetDBLite::MonetDBLite(), "database")
+con
+
+write_csv(mtcars, "mtcars2.csv")
+
+DBI::dbWriteTable(con, "mtcars2", "mtcars2.csv")
+DBI::dbListTables(con)
+
+#Doesn't work because data is tab separated
+#DBI::dbWriteTable(con, "vernacular", "2013-col/vernacular.txt")
+
+#This is a bulk data inport
+common_names <- monet.read.csv(con, "2013-col/vernacular.txt", "vernacular", delim = "\t", quote = "") #delim sets tab delimited
+#monet.read.csv(con, "2013-col/taxa.txt", "taxa", delim = "\t", quote = "", nrow.check = 50000) #keeps failing because it can't figure out the type
+DBI::dbRemoveTable(con, "taxa")
+
+```
+
+```{r}
+arkdb::unark("2013-col/taxa.txt",
+             con,
+             streamable_readr_tsv(), 
+             quote="", 
+             col_types = cols(.default = "c")) #reads the file in in chunks.
+
+taxa <- tbl(con,"taxa")
+taxa
+```
+
+```{r}
+remote_mtcars <- tbl(con, "mtcars")
+remote_mtcars
+
+remote_mtcars %>%  show_query()
+remote_mtcars %>%  select(mpg, cyl) %>%  filter(mpg < 20) %>%  show_query()
+
+remote_mtcars %>% collect() # do this after all your other commands which limits the data, it will save it into memory
+```
+
+
+
